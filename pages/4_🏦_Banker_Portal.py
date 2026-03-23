@@ -4,10 +4,12 @@ import plotly.express as px
 import pandas as pd
 import sys
 import os
+st.set_page_config(
+    layout="wide",
+)
 hide_st_style = """
             <style>
             #MainMenu {visibility: hidden;}
-            header {visibility: hidden;}
             footer {visibility: hidden;}
             </style>
             """
@@ -18,7 +20,6 @@ hide_streamlit_cloud_elements = """
     <style>
     /* 1. 隱藏右上角選單與工具欄 */
     #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
     
     /* 2. 隱藏頁尾 "Made with Streamlit" */
     footer {visibility: hidden;}
@@ -45,7 +46,7 @@ hide_streamlit_cloud_elements = """
 
 st.markdown(hide_streamlit_cloud_elements, unsafe_allow_html=True)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.state import init_state
+from utils.state import init_state, persist_state
 
 init_state()
 
@@ -80,6 +81,7 @@ with col1:
     fig.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor="rgba(0,0,0,0)", font={'color': "white"})
     st.plotly_chart(fig, use_container_width=True)
 
+ 
 with col2:
     if st.session_state.anomaly_detected:
          st.error("🚨 ALERT: Anomaly detected by AI Auditor. Review immediately. Funding paused.")
@@ -98,6 +100,7 @@ with col2:
             st.success("✅ Smart Contract conditions met. Production is backed by verified immutable ledger records.")
             if st.button("Release Funds / Execute Smart Contract"):
                 st.session_state.funds_released = True
+                persist_state()
                 st.balloons()
                 st.success("💰 Funds Released to SME Wallet via Stablecoin!")
         elif st.session_state.anomaly_detected:
@@ -109,30 +112,100 @@ with col2:
     else:
         st.info("No active financing requests. SME needs to sync ERP data with an active Purchase Order.")
 
+with st.expander("📊 View Scoring Equation & Details"):
+    st.markdown(r"""
+    **Dynamic Credit Score Equation:**
+    $$
+    \text{Score} = \underbrace{750}_{\text{Base}} + (\text{Inventory Coverage Ratio} \times 100) + (\text{IoT Uptime \%} \times 1.5) - \text{Penalties}
+    $$
+
+    *Penalties applied for raw material shortfall ($-100$) or significant machine downtime ($-150$).*
+    """)
+    
+    po_data = st.session_state.po_data
+    inv_data = st.session_state.inventory_data
+    iot_data = st.session_state.iot_data
+    
+    coverage_ratio = min(1.0, inv_data['raw_material'] / po_data['units']) if po_data['units'] > 0 else 1.0
+    st.write(f"- **Base Score:** 750")
+    st.write(f"- **Inventory Component:** +{int(coverage_ratio * 100)} (Coverage: {coverage_ratio:.2f})")
+    st.write(f"- **IoT Uptime Component:** +{int(iot_data['uptime'] * 1.5)} (Uptime: {iot_data['uptime']}%)")
+    
+    penalty = 0
+    if inv_data['raw_material'] < po_data['units']:
+        penalty -= 100
+    if iot_data['uptime'] < 90:
+        penalty -= 150
+        
+    if penalty < 0:
+        st.write(f"- **Penalties Applied:** {penalty}")
+    else:
+        st.write(f"- **Penalties Applied:** None")
 
 st.divider()
-st.subheader("Risk Breakdown Charts")
-r_col1, r_col2 = st.columns(2)
 
-with r_col1:
-    # Historical Fulfillment Reliability (dummy data)
-    data_hist = pd.DataFrame({
-        "Month": ["Jan", "Feb", "Mar", "Apr", "May", "Current"],
-        "Fulfillment %": [98, 95, 99, 100, 97, 100 if not st.session_state.anomaly_detected else 85]
-    })
-    fig_hist = px.bar(data_hist, x="Month", y="Fulfillment %", title="Historical Fulfillment Reliability", color="Fulfillment %", color_continuous_scale="greens")
-    fig_hist.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font={'color': "white"})
-    st.plotly_chart(fig_hist, use_container_width=True)
+st.subheader("🔍 Critical Risk Indicators")
 
-with r_col2:
-    # Utilization vs Target
-    po_units = st.session_state.po_data['units'] if st.session_state.po_data['units'] > 0 else 1000
-    produced = st.session_state.iot_data['produced']
+# 取得必要資料
+inventory = st.session_state.inventory_data
+po = st.session_state.po_data
+iot = st.session_state.iot_data
+ledger = st.session_state.ledger
+
+# 計算關鍵指標
+raw_material_shortfall = max(0, po['units'] - inventory['raw_material']) if po['units'] > 0 else 0
+production_delay_risk = max(0, po['units'] - iot['produced']) if po['units'] > 0 else 0
+ledger_gaps = max(0, po['units'] - len(ledger)) if po['units'] > 0 else 0
+
+# 顯示關鍵指標卡片
+col_ind1, col_ind2, col_ind3 = st.columns(3)
+
+with col_ind1:
+    if raw_material_shortfall > 0:
+        st.error(f"⚠️ **Raw Material Shortfall:** {raw_material_shortfall} units")
+    else:
+        st.success("✅ Raw Material: Sufficient")
+
+with col_ind2:
+    if production_delay_risk > 0:
+        st.warning(f"⏰ **Production Delay Risk:** {production_delay_risk} units behind")
+    else:
+        st.success("✅ Production: On Track")
+
+with col_ind3:
+    if ledger_gaps > 0:
+        st.warning(f"📋 **Ledger Verification Gaps:** {ledger_gaps} units unverified")
+    else:
+        st.success("✅ Ledger: Fully Verified")
+
+# 風險評分說明
+with st.expander("📊 Risk Scoring Details"):
+    st.markdown("""
+    **Critical Risk Factors:**
     
-    data_util = pd.DataFrame({
-        "Category": ["Produced", "Pending"],
-        "Units": [produced, max(0, po_units - produced)]
-    })
-    fig_util = px.pie(data_util, names="Category", values="Units", title="Production Utilization vs Target", hole=0.4, color="Category", color_discrete_map={"Produced": "#58a6ff", "Pending": "#30363d"})
-    fig_util.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font={'color': "white"})
-    st.plotly_chart(fig_util, use_container_width=True)
+    1. **Raw Material Coverage:** Current inventory vs PO requirements
+       - Risk Level: High if shortfall > 10% of PO units
+       - Impact: Production halt, financing risk
+    
+    2. **Production Progress:** Actual vs planned production
+       - Risk Level: High if behind schedule > 20%
+       - Impact: Delivery delays, penalty clauses
+    
+    3. **Ledger Verification:** Blockchain milestone coverage
+       - Risk Level: High if unverified units > 15%
+       - Impact: Smart contract failure, funding freeze
+    
+    **Current Status:**
+    """)
+    
+    # 詳細風險分析
+    if po['units'] > 0:
+        material_risk_pct = (raw_material_shortfall / po['units']) * 100
+        production_risk_pct = (production_delay_risk / po['units']) * 100
+        ledger_risk_pct = (ledger_gaps / po['units']) * 100
+        
+        st.write(f"- **Material Risk:** {material_risk_pct:.1f}% ({'HIGH' if material_risk_pct > 10 else 'LOW'})")
+        st.write(f"- **Production Risk:** {production_risk_pct:.1f}% ({'HIGH' if production_risk_pct > 20 else 'LOW'})")
+        st.write(f"- **Verification Risk:** {ledger_risk_pct:.1f}% ({'HIGH' if ledger_risk_pct > 15 else 'LOW'})")
+    else:
+        st.info("No active PO to analyze")

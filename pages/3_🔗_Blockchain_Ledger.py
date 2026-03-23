@@ -2,10 +2,13 @@ import streamlit as st
 import pandas as pd
 import sys
 import os
+st.set_page_config(
+    layout="wide",
+)   
+
 hide_st_style = """
             <style>
             #MainMenu {visibility: hidden;}
-            header {visibility: hidden;}
             footer {visibility: hidden;}
             </style>
             """
@@ -16,7 +19,6 @@ hide_streamlit_cloud_elements = """
     <style>
     /* 1. 隱藏右上角選單與工具欄 */
     #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
     
     /* 2. 隱藏頁尾 "Made with Streamlit" */
     footer {visibility: hidden;}

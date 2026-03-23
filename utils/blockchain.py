@@ -2,6 +2,7 @@ import streamlit as st
 import hashlib
 import time
 import uuid
+from utils.db import save_ledger_entry
 
 def generate_milestone_hash(milestone_desc, po_units, uptime):
     # Combine data to create a unique hash
@@ -18,10 +19,13 @@ def record_milestone(desc):
     
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
     
-    st.session_state.ledger.append({
+    entry = {
         "Timestamp": timestamp,
         "Milestone": desc,
         "Data Hash": data_hash,
         "Transaction ID": tx_id
-    })
+    }
+    
+    st.session_state.ledger.append(entry)
+    save_ledger_entry(entry)
     return data_hash

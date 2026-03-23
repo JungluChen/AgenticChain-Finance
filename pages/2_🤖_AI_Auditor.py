@@ -2,10 +2,12 @@ import streamlit as st
 import time
 import sys
 import os
+st.set_page_config(
+    layout="wide",
+)
 hide_st_style = """
             <style>
             #MainMenu {visibility: hidden;}
-            header {visibility: hidden;}
             footer {visibility: hidden;}
             </style>
             """
@@ -16,7 +18,6 @@ hide_streamlit_cloud_elements = """
     <style>
     /* 1. 隱藏右上角選單與工具欄 */
     #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
     
     /* 2. 隱藏頁尾 "Made with Streamlit" */
     footer {visibility: hidden;}
@@ -43,8 +44,8 @@ hide_streamlit_cloud_elements = """
 
 st.markdown(hide_streamlit_cloud_elements, unsafe_allow_html=True)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.state import init_state
-from utils.agent import run_agent_reasoning
+from utils.state import init_state, persist_state
+from utils.agent import run_agent_reasoning, get_agent_reasoning, calculate_credit_score
 from utils.blockchain import record_milestone
 
 init_state()
@@ -111,12 +112,21 @@ if st.button("Run AI Audit Cycle"):
             hash_val = record_milestone(f"Verified Production: PO for {po['units']} units. Uptime {iot['uptime']}%.")
             st.session_state.agent_logs.append(f"🔗 Ledger Anchor Created. Hash: {hash_val}")
             
-            # Increase credit score
-            st.session_state.credit_score = min(1000, st.session_state.credit_score + 50)
-            st.success("✅ Audit passed! Milestone recorded on ledger and credit score boosted.")
+            # Increase credit score using equation
+            new_score = calculate_credit_score(po, inv, iot, base_score=750)
+            st.session_state.credit_score = new_score
+            st.success(f"✅ Audit passed! Milestone recorded on ledger. Dynamic Score: {new_score}")
         else:
-            # Drop credit score
-            st.session_state.credit_score = max(0, st.session_state.credit_score - 100)
-            st.error("❌ Audit failed due to anomalies. Score penalized. Banker alerts triggered.")
+            # Drop credit score using equation
+            new_score = calculate_credit_score(po, inv, iot, base_score=750)
+            st.session_state.credit_score = new_score
+            st.error(f"❌ Audit failed due to anomalies. Score penalized. Banker alerts triggered. Dynamic Score: {new_score}")
         
+        # Add NVIDIA NIM Analysis
+        st.session_state.agent_logs.append("🤖 Calling NVIDIA NIM API for Deep Analysis...")
+        refresh_logs()
+        nim_analysis = get_agent_reasoning(po, inv, iot)
+        st.session_state.agent_logs.append(f"**NVIDIA NIM Analysis:**\n\n{nim_analysis}")
+        
+        persist_state()
         refresh_logs()
